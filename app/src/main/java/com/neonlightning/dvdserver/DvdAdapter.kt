@@ -13,46 +13,78 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 
 class DvdAdapter(
-    private val onClick: (Dvd) -> Unit
-) : RecyclerView.Adapter<DvdAdapter.VH>() {
+    private val onClick: (Dvd, Int) -> Unit
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-    private val items = mutableListOf<Dvd>()
+    companion object {
+        private const val TYPE_HEADER = 0
+        private const val TYPE_ITEM = 1
+    }
+
+    private val flatItems = mutableListOf<Any>() // Contains either String (header) or Dvd (item)
     var textColor: Int = Color.WHITE
     var textDimColor: Int = Color.LTGRAY
     var accentColor: Int = Color.parseColor("#E91E63")
     var backgroundColor: Int = Color.parseColor("#101014")
     var panelColor: Int = Color.parseColor("#1B1B22")
 
-    fun submit(items: List<Dvd>) {
-        this.items.clear()
-        this.items.addAll(items)
+    fun submit(dvds: List<Dvd>) {
+        flatItems.clear()
+        
+        // Group by genre
+        val grouped = dvds.groupBy { it.genre }
+        for ((genre, list) in grouped) {
+            val label = if (genre.isBlank()) "Uncategorized" else genre
+            flatItems.add(label)
+            flatItems.addAll(list)
+        }
         notifyDataSetChanged()
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_dvd, parent, false)
-        return VH(view)
+    override fun getItemViewType(position: Int): Int {
+        return if (flatItems[position] is String) TYPE_HEADER else TYPE_ITEM
     }
 
-    override fun onBindViewHolder(holder: VH, position: Int) {
-        holder.bind(items[position])
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        if (viewType == TYPE_HEADER) {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_genre_header, parent, false)
+            return HeaderVH(view)
+        } else {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_dvd, parent, false)
+            return ItemVH(view)
+        }
     }
 
-    override fun getItemCount() = items.size
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        if (holder is HeaderVH) {
+            holder.bind(flatItems[position] as String)
+        } else if (holder is ItemVH) {
+            holder.bind(flatItems[position] as Dvd)
+        }
+    }
 
-    inner class VH(view: View) : RecyclerView.ViewHolder(view) {
+    override fun getItemCount() = flatItems.size
+
+    inner class HeaderVH(view: View) : RecyclerView.ViewHolder(view) {
+        private val headerText: TextView = view.findViewById(R.id.headerText)
+
+        fun bind(genreLabel: String) {
+            headerText.text = genreLabel
+            headerText.setTextColor(accentColor)
+        }
+    }
+
+    inner class ItemVH(view: View) : RecyclerView.ViewHolder(view) {
         private val name: TextView = view.findViewById(R.id.nameText)
         private val path: TextView = view.findViewById(R.id.pathText)
         private val cover: ImageView = view.findViewById(R.id.coverThumb)
 
         fun bind(dvd: Dvd) {
-            name.text = dvd.name
-            path.text = dvd.path
+            name.text = dvd.display_name
+            path.text = dvd.name
             
-            // Text color logic: if background is accent, black text might be better?
-            // User wanted "text be black" for Hot Dog, but for others?
-            // Let's use Color.BLACK if background is light/bright
             val isBright = isColorBright(accentColor)
             val contentColor = if (isBright) Color.BLACK else Color.WHITE
             
@@ -70,14 +102,13 @@ class DvdAdapter(
                 cover.visibility = View.GONE
             }
             
-            // Selector styling as requested
             val focused = GradientDrawable().apply {
-                setColor(backgroundColor) // Selected (Focused) is Background Color
+                setColor(backgroundColor)
                 setStroke(6, accentColor)
                 cornerRadius = 0f
             }
             val normal = GradientDrawable().apply {
-                setColor(accentColor) // Unselected (Normal) is Accent Color
+                setColor(accentColor)
                 setStroke(2, Color.BLACK)
                 cornerRadius = 0f
             }
@@ -87,17 +118,13 @@ class DvdAdapter(
                 addState(intArrayOf(), normal)
             }
             
-            // Text color logic: 
-            // Unselected (Accent BG) -> Black if accent is bright, else White
-            // Selected (Main BG) -> Theme's textColor (which is designed for BG)
-            
             fun applyTextColors(hasFocus: Boolean) {
                 if (hasFocus) {
                     name.setTextColor(textColor)
                     path.setTextColor(textColor)
                 } else {
-                    val isBright = isColorBright(accentColor)
-                    val color = if (isBright) Color.BLACK else Color.WHITE
+                    val bright = isColorBright(accentColor)
+                    val color = if (bright) Color.BLACK else Color.WHITE
                     name.setTextColor(color)
                     path.setTextColor(color)
                 }
@@ -110,12 +137,17 @@ class DvdAdapter(
                 applyTextColors(hasFocus)
             }
             
-            itemView.setOnClickListener { onClick(dvd) }
+            itemView.setOnClickListener { 
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    onClick(dvd, pos)
+                }
+            }
         }
-        
-        private fun isColorBright(color: Int): Boolean {
-            val darkness = 1 - (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255
-            return darkness < 0.5
-        }
+    }
+
+    private fun isColorBright(color: Int): Boolean {
+        val darkness = 1 - (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255
+        return darkness < 0.5
     }
 }

@@ -8,9 +8,12 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.TextView
 import android.widget.Toast
@@ -25,6 +28,7 @@ import kotlin.concurrent.thread
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: DvdAdapter
+    private lateinit var prefs: AppPreferences
     
     private var rawTitles: List<DvdTitle> = emptyList()
     private var sortedTitles: List<DvdTitle> = emptyList()
@@ -37,12 +41,27 @@ class MainActivity : AppCompatActivity() {
     private var selectedAudioIdx = 0
     private var selectedSubIdx = 0 // 0 = Off
 
+    private val inactivityHandler = Handler(Looper.getMainLooper())
+    private val inactivityRunnable = Runnable { applyDimming(true) }
+    private var inactivityTimeoutMinutes = DEFAULT_INACTIVITY_TIMEOUT_MINUTES
+
+    companion object {
+        private const val SIDEBAR_WIDTH_COLLAPSED_DP = 180
+        private const val SIDEBAR_WIDTH_EXPANDED_DP = 260
+        private const val FOCUS_LAYOUT_DELAY_MS = 50L
+        private const val DEFAULT_INACTIVITY_TIMEOUT_MINUTES = 2
+        private const val SCREEN_DIM_LEVEL = 0.001f
+        private const val INACTIVITY_TIME_MS_PER_MINUTE = 60_000
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        adapter = DvdAdapter { dvd -> onDvdSelected(dvd) }
+        prefs = AppPreferences(this)
+
+        adapter = DvdAdapter { dvd, position -> onDvdSelected(dvd, position) }
         binding.dvdRecycler.layoutManager = LinearLayoutManager(this)
         binding.dvdRecycler.adapter = adapter
 
@@ -52,10 +71,17 @@ class MainActivity : AppCompatActivity() {
         binding.settingsButton.setOnClickListener { 
             startActivity(Intent(this, SettingsActivity::class.java)) 
         }
+        binding.exitButton.setOnClickListener { finish() }
 
         binding.clearCacheBtn.setOnClickListener {
             Toast.makeText(this, "Clearing server cache...", Toast.LENGTH_SHORT).show()
-            thread { try { Api.clearCache() } catch (e: Exception) {} }
+            Thread { 
+                try { 
+                    Api.clearCache() 
+                } catch (e: Exception) {
+                    AppLogger.e("Failed to clear cache", e)
+                } 
+            }.start()
         }
         
         binding.titleSelectBtn.setOnClickListener { showTitleDialog() }
@@ -65,10 +91,85 @@ class MainActivity : AppCompatActivity() {
         binding.refreshButton.requestFocus()
     }
 
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (binding.dvdDetails.visibility == View.VISIBLE) {
+            // Go back to the DVD list / sidebar
+            binding.dvdDetails.visibility = View.GONE
+            binding.emptyState.visibility = View.VISIBLE
+            val params = binding.sidebar.layoutParams
+            params.width = (260 * resources.displayMetrics.density).toInt()
+            binding.sidebar.layoutParams = params
+            selectedDvd = null
+            
+            // Focus back on the last selected DVD item or first item
+            val prefs = getSharedPreferences("dvd_server", MODE_PRIVATE)
+            val lastPos = prefs.getInt("last_selected_dvd", 0)
+            
+            val layoutManager = binding.dvdRecycler.layoutManager as? LinearLayoutManager
+            layoutManager?.scrollToPositionWithOffset(lastPos, 0)
+            
+            // Give RecyclerView a moment to layout/bind before requesting focus
+            binding.dvdRecycler.postDelayed({
+                val vh = binding.dvdRecycler.findViewHolderForAdapterPosition(lastPos)
+                if (vh != null) {
+                    vh.itemView.requestFocus()
+                } else {
+                    val view = layoutManager?.findViewByPosition(lastPos)
+                    if (view != null) {
+                        view.requestFocus()
+                    } else {
+                        // Force layout and try once more
+                        binding.dvdRecycler.measure(
+                            View.MeasureSpec.makeMeasureSpec(binding.dvdRecycler.width, View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(binding.dvdRecycler.height, View.MeasureSpec.EXACTLY)
+                        )
+                        binding.dvdRecycler.layout(binding.dvdRecycler.left, binding.dvdRecycler.top, binding.dvdRecycler.right, binding.dvdRecycler.bottom)
+                        binding.dvdRecycler.findViewHolderForAdapterPosition(lastPos)?.itemView?.requestFocus()
+                            ?: binding.dvdRecycler.getChildAt(0)?.requestFocus()
+                            ?: binding.refreshButton.requestFocus()
+                    }
+                }
+            }, 50L)
+        } else {
+            // Prevent exiting completely on Back press
+            binding.exitButton.requestFocus()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         loadPreferences()
         refresh()
+        resetInactivityTimer()
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        applyDimming(false)
+        resetInactivityTimer()
+    }
+
+    override fun onPause() {
+        inactivityHandler.removeCallbacks(inactivityRunnable)
+        applyDimming(false)
+        super.onPause()
+    }
+
+    private fun resetInactivityTimer() {
+        inactivityHandler.removeCallbacks(inactivityRunnable)
+        if (inactivityTimeoutMinutes > 0) {
+            inactivityHandler.postDelayed(inactivityRunnable, inactivityTimeoutMinutes * 60 * 1000L)
+        }
+    }
+
+    private fun applyDimming(dim: Boolean) {
+        val window = window ?: return
+        val lp = window.attributes
+        lp.screenBrightness = if (dim) 0.001f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        window.attributes = lp
+        
+        binding.dimOverlay.visibility = if (dim) View.VISIBLE else View.GONE
     }
 
     private fun loadPreferences() {
@@ -85,6 +186,9 @@ class MainActivity : AppCompatActivity() {
         binding.autoplayToggle.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("autoplay", isChecked).apply()
         }
+
+        inactivityTimeoutMinutes = prefs.getInt("screensaver_minutes", 2)
+        resetInactivityTimer()
     }
 
     private fun getDialogTheme(): Int {
@@ -258,7 +362,7 @@ class MainActivity : AppCompatActivity() {
                        if (themeName == "Light" || isHotDog) Color.BLACK else Color.WHITE)
         ) {})
 
-        listOf(binding.refreshButton, binding.settingsButton, binding.clearCacheBtn, binding.sortButton).forEach { btn ->
+        listOf(binding.refreshButton, binding.settingsButton, binding.clearCacheBtn, binding.exitButton, binding.sortButton).forEach { btn ->
             btn.backgroundTintList = null
             btn.background = createButtonBg(accentColor, Color.TRANSPARENT, isOutlined = isHotDog)
             val normalTextColor = if (btn == binding.refreshButton) accentColor else textColor
@@ -318,6 +422,23 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     adapter.submit(dvds)
                     binding.statusText.text = "${dvds.size} DVDs"
+                    
+                    val prefs = getSharedPreferences("dvd_server", MODE_PRIVATE)
+                    val lastPos = prefs.getInt("last_selected_dvd", -1)
+                    val targetPos = if (lastPos != -1 && lastPos < dvds.size) lastPos else 0
+                    if (dvds.isNotEmpty()) {
+                        binding.dvdRecycler.scrollToPosition(targetPos)
+                        binding.dvdRecycler.post {
+                            val vh = binding.dvdRecycler.findViewHolderForAdapterPosition(targetPos)
+                            if (vh != null) {
+                                vh.itemView.requestFocus()
+                            } else {
+                                // If viewholder isn't bound yet, layout manager can request focus on the layout item view
+                                binding.dvdRecycler.layoutManager?.findViewByPosition(targetPos)?.requestFocus()
+                                    ?: binding.dvdRecycler.getChildAt(0)?.requestFocus()
+                            }
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread { binding.statusText.text = "Offline" }
@@ -325,7 +446,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun onDvdSelected(dvd: Dvd) {
+    private fun onDvdSelected(dvd: Dvd, position: Int) {
+        getSharedPreferences("dvd_server", MODE_PRIVATE).edit().putInt("last_selected_dvd", position).apply()
+
         val prefs = getSharedPreferences("dvd_server", MODE_PRIVATE)
         val mode = prefs.getInt("cache_mode", 0)
         if (mode == 3 && selectedDvd != null) {

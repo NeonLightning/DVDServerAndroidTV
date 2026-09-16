@@ -9,6 +9,7 @@ import android.graphics.drawable.StateListDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -57,6 +58,7 @@ class PlayerActivity : AppCompatActivity() {
 
         // Player background is ALWAYS black
         binding.root.setBackgroundColor(Color.BLACK)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         applyThemeToUI(themeName)
 
         binding.backButton.setOnClickListener { finish() }

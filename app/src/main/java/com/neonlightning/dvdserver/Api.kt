@@ -9,6 +9,9 @@ import java.net.URL
 object Api {
     var baseUrl: String = "http://192.168.1.100:4251"
 
+    fun encodePathSegments(p: String): String =
+        p.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+
     private fun get(path: String): String {
         val url = URL(baseUrl.trimEnd('/') + path)
         val conn = url.openConnection() as HttpURLConnection
@@ -49,15 +52,18 @@ object Api {
         return List(arr.length()) { i ->
             val o = arr.getJSONObject(i)
             Dvd(
-                o.optString("name"), 
-                o.optString("path"), 
-                if (o.has("cover")) o.getString("cover") else null
+                name = o.optString("name"),
+                display_name = o.optString("display_name", o.optString("name")),
+                genre = o.optString("genre", ""),
+                subpath = o.optString("subpath", ""),
+                path = o.optString("path", ""),
+                cover = if (o.has("cover")) o.getString("cover") else null
             )
         }
     }
 
     fun loadDvd(name: String): List<DvdTitle> {
-        val encoded = URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+        val encoded = encodePathSegments(name)
         val root = JSONObject(post("/api/dvd/load/$encoded"))
         val arr = root.optJSONArray("titles") ?: JSONArray()
         return List(arr.length()) { i -> parseTitle(i, arr.getJSONObject(i)) }
@@ -65,10 +71,6 @@ object Api {
 
     private fun parseTitle(index: Int, o: JSONObject): DvdTitle {
         val chapters = mutableListOf<Chapter>()
-        // ... (existing code handles chapters)
-        
-        // (rest of the code needs to be adjusted to include index)
-        // I'll use multi_replace for safer editing of the private fun parseTitle
         val ca = o.optJSONArray("chapters") ?: JSONArray()
         for (i in 0 until ca.length()) {
             val c = ca.getJSONObject(i)
@@ -135,8 +137,8 @@ object Api {
 
     fun clearCache(dvdName: String? = null) {
         val path = if (dvdName != null) {
-            val encoded = URLEncoder.encode(dvdName, "UTF-8").replace("+", "%20")
-            "/api/dvd/cache/clear?dvd=$encoded"
+            val encodedQuery = URLEncoder.encode(dvdName, "UTF-8")
+            "/api/dvd/cache/clear?dvd=$encodedQuery"
         } else {
             "/api/dvd/cache/clear"
         }

@@ -1,8 +1,11 @@
 package com.neonlightning.dvdserver
 
 data class Dvd(
-    val name: String,
-    val path: String,
+    val name: String,          // Full relative path as unique ID
+    val display_name: String,  // Short label for UI display
+    val genre: String,         // Top-level folder
+    val subpath: String,       // Dirs between genre and DVD name
+    val path: String,          // Absolute path on server
     val cover: String?
 )
 
