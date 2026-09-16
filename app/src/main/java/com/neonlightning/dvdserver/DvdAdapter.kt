@@ -21,7 +21,10 @@ class DvdAdapter(
         private const val TYPE_ITEM = 1
     }
 
+    private val allGrouped = mutableMapOf<String, List<Dvd>>()
+    private val collapsedGenres = mutableSetOf<String>()
     private val flatItems = mutableListOf<Any>() // Contains either String (header) or Dvd (item)
+
     var textColor: Int = Color.WHITE
     var textDimColor: Int = Color.LTGRAY
     var accentColor: Int = Color.parseColor("#E91E63")
@@ -29,14 +32,26 @@ class DvdAdapter(
     var panelColor: Int = Color.parseColor("#1B1B22")
 
     fun submit(dvds: List<Dvd>) {
-        flatItems.clear()
-        
-        // Group by genre
+        allGrouped.clear()
         val grouped = dvds.groupBy { it.genre }
         for ((genre, list) in grouped) {
             val label = if (genre.isBlank()) "Uncategorized" else genre
-            flatItems.add(label)
-            flatItems.addAll(list)
+            allGrouped[label] = list
+            // Start collapsed by default if not explicitly tracked
+            if (!collapsedGenres.contains(label)) {
+                collapsedGenres.add(label)
+            }
+        }
+        rebuildFlatList()
+    }
+
+    private fun rebuildFlatList() {
+        flatItems.clear()
+        for ((genreLabel, list) in allGrouped) {
+            flatItems.add(genreLabel)
+            if (!collapsedGenres.contains(genreLabel)) {
+                flatItems.addAll(list)
+            }
         }
         notifyDataSetChanged()
     }
@@ -71,9 +86,39 @@ class DvdAdapter(
         private val headerText: TextView = view.findViewById(R.id.headerText)
 
         fun bind(genreLabel: String) {
-            headerText.text = genreLabel
+            val isCollapsed = collapsedGenres.contains(genreLabel)
+            val arrow = if (isCollapsed) "▶ " else "▼ "
+            headerText.text = "$arrow$genreLabel"
             headerText.setTextColor(accentColor)
+            
+            val focused = GradientDrawable().apply {
+                setColor(backgroundColor)
+                setStroke(4, accentColor)
+                cornerRadius = 0f
+            }
+            val normal = ColorDrawable(Color.TRANSPARENT)
+            
+            headerText.background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), focused)
+                addState(intArrayOf(), normal)
+            }
+            
+            headerText.isFocusable = true
+            headerText.isFocusableInTouchMode = true
+            
+            headerText.setOnClickListener {
+                toggleGenre(genreLabel)
+            }
         }
+    }
+
+    private fun toggleGenre(genreLabel: String) {
+        if (collapsedGenres.contains(genreLabel)) {
+            collapsedGenres.remove(genreLabel)
+        } else {
+            collapsedGenres.add(genreLabel)
+        }
+        rebuildFlatList()
     }
 
     inner class ItemVH(view: View) : RecyclerView.ViewHolder(view) {
