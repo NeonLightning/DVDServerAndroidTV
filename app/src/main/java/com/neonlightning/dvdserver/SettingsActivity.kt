@@ -46,6 +46,19 @@ class SettingsActivity : AppCompatActivity() {
         
         val currentCacheMode = prefs.getInt("cache_mode", 0)
         binding.cacheModeButton.text = cacheOptions[currentCacheMode]
+
+        val screensaverMinutes = prefs.getInt("screensaver_minutes", 2)
+        val screensaverOptions = listOf("1 Minute", "2 Minutes", "5 Minutes", "10 Minutes", "Never")
+        val screensaverValues = listOf(1, 2, 5, 10, -1)
+        val currentScreensaverIdx = screensaverValues.indexOf(screensaverMinutes).let { if (it != -1) it else 1 }
+        binding.screensaverTimeButton.text = screensaverOptions[currentScreensaverIdx]
+
+        binding.screensaverTimeButton.setOnClickListener {
+            showThemedListDialog("Inactivity Timeout", screensaverOptions) { which ->
+                binding.screensaverTimeButton.text = screensaverOptions[which]
+                getSharedPreferences("dvd_server", MODE_PRIVATE).edit().putInt("screensaver_minutes", screensaverValues[which]).apply()
+            }
+        }
         
         binding.currentServerText.text = "Current: ${Api.baseUrl}"
 
@@ -76,7 +89,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
         
-        binding.doneButton.setOnClickListener { finish() }
+        // Removed doneButton listener since the button was removed from layout
 
         discoveryManager = DiscoveryManager(this) { name, url ->
             runOnUiThread { discoveredServers[name] = url }
@@ -276,15 +289,15 @@ class SettingsActivity : AppCompatActivity() {
         val isHotDog = themeName == "Hot Dog Stand"
         
         // --- Selection Boxes (Styled like Spinners in MainActivity) ---
-        listOf(binding.themeButton, binding.cacheModeButton).forEach { sp ->
+        listOf(binding.themeButton, binding.cacheModeButton, binding.screensaverTimeButton).forEach { sp ->
             sp.backgroundTintList = null
             sp.background = createSpinnerBg(accentColor, palette.second.toColorInt())
             sp.setTextColor(textColor)
         }
         
-        // --- Regular Buttons (Done, Server Setup) ---
-        // Style "Done" and "Server Setup" buttons to match the standard button theme
-        listOf(binding.doneButton, binding.serverSetupButton).forEach { btn ->
+        // --- Regular Buttons (Server Setup) ---
+        // Style "Server Setup" button to match the standard button theme
+        listOf(binding.serverSetupButton).forEach { btn ->
             btn.backgroundTintList = null
             btn.background = createButtonBg(accentColor, Color.TRANSPARENT, isOutlined = isHotDog)
             btn.setTextColor(object : ColorStateList(
@@ -300,6 +313,8 @@ class SettingsActivity : AppCompatActivity() {
             binding.settingsRoot.findViewWithTag<TextView>("label_ui_theme"),
             binding.settingsRoot.findViewWithTag<TextView>("label_cache_mgmt"),
             binding.settingsRoot.findViewWithTag<TextView>("label_auto_clearing"),
+            binding.settingsRoot.findViewWithTag<TextView>("label_screensaver"),
+            binding.settingsRoot.findViewWithTag<TextView>("label_timeout"),
             binding.settingsRoot.findViewWithTag<TextView>("label_server_conn"),
             binding.settingsRoot.findViewWithTag<TextView>("label_changes_hint")
         )

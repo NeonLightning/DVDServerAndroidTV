@@ -13,7 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 
 class DvdAdapter(
-    private val onClick: (Dvd) -> Unit
+    private val onClick: (Dvd, Int) -> Unit
 ) : RecyclerView.Adapter<DvdAdapter.VH>() {
 
     private val items = mutableListOf<Dvd>()
@@ -110,7 +110,12 @@ class DvdAdapter(
                 applyTextColors(hasFocus)
             }
             
-            itemView.setOnClickListener { onClick(dvd) }
+            itemView.setOnClickListener { 
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    onClick(dvd, pos)
+                }
+            }
         }
         
         private fun isColorBright(color: Int): Boolean {
