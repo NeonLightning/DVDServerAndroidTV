@@ -9,8 +9,9 @@ import java.net.URL
 object Api {
     var baseUrl: String = "http://192.168.1.100:4251"
 
-    fun encodePathSegments(p: String): String =
-        p.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+    fun encodePathSegments(p: String): String {
+        return p.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+    }
 
     private fun get(path: String): String {
         val url = URL(baseUrl.trimEnd('/') + path)

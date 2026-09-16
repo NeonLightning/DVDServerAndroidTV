@@ -485,7 +485,8 @@ class MainActivity : AppCompatActivity() {
                     setupTitleSelection()
                 }
             } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this, "Load failed", Toast.LENGTH_SHORT).show() }
+                AppLogger.e("Load failed for DVD ${dvd.name}", e)
+                runOnUiThread { Toast.makeText(this, "Load failed: ${e.message}", Toast.LENGTH_LONG).show() }
             }
         }
     }
