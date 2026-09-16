@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:background="@color/bg"
+    android:baselineAligned="false">
+
+    <!-- Sidebar (Left) -->
+    <LinearLayout
+        android:id="@+id/sidebar"
+        android:layout_width="260dp"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="@color/panel"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/appTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📀 DVD Server"
+            android:textColor="@color/text_primary"
+            android:textSize="18sp"
+            android:fontFamily="sans-serif-black"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="YOUR DVDS"
+            android:textColor="@color/text_dim"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="6dp"
+            android:tag="label_dvds" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/dvdRecycler"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:scrollbars="vertical"
+            android:clipToPadding="false" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/border_soft"
+            android:layout_marginVertical="8dp" />
+
+        <!-- Controls Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CONTROLS"
+            android:textColor="@color/text_dim"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp"
+            android:tag="label_controls" />
+
+        <CheckBox
+            android:id="@+id/autoplayToggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Autoplay Next"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp"
+            android:focusable="true" />
+
+        <Button
+            android:id="@+id/clearCacheBtn"
+            style="@style/Widget.AppCompat.Button.Borderless"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="CLEAR ALL CACHE"
+            android:textSize="10sp"
+            android:textColor="@color/text_secondary"
+            android:focusable="true" />
+
+        <Button
+            android:id="@+id/settingsButton"
+            style="@style/Widget.AppCompat.Button.Borderless"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="SETTINGS"
+            android:textSize="10sp"
+            android:textColor="@color/text_secondary"
+            android:focusable="true" />
+
+        <Button
+            android:id="@+id/refreshButton"
+            style="@style/Widget.AppCompat.Button.Borderless"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="REFRESH LIST"
+            android:textSize="10sp"
+            android:textColor="@color/accent"
+            android:textStyle="bold"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connected"
+            android:textColor="@color/text_dim"
+            android:textSize="9sp"
+            android:gravity="end"
+            android:layout_marginTop="4dp" />
+    </LinearLayout>
+
+    <!-- Main Content Area (Right) -->
+    <FrameLayout
+        android:id="@+id/mainContent"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:padding="24dp">
+
+        <!-- Empty State -->
+        <LinearLayout
+            android:id="@+id/emptyState"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="👈 Select a DVD to start"
+                android:textColor="@color/text_dim"
+                android:textSize="14sp"
+                android:tag="empty_text" />
+        </LinearLayout>
+
+        <!-- DVD Details & Title Selection -->
+        <LinearLayout
+            android:id="@+id/dvdDetails"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/selectedDvdName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Movie Name"
+                android:textColor="@color/text_primary"
+                android:textSize="24sp"
+                android:fontFamily="sans-serif-black" />
+
+            <TextView
+                android:id="@+id/selectedDvdPath"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="/path/to/movie"
+                android:textColor="@color/text_dim"
+                android:textSize="11sp"
+                android:layout_marginBottom="16dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/border_soft"
+                android:layout_marginBottom="16dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="SELECT TITLE"
+                    android:textColor="@color/text_dim"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1"
+                    android:tag="label_select_title" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SORT BY"
+                    android:textColor="@color/text_dim"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:layout_marginEnd="8dp"
+                    android:tag="label_sort_by" />
+
+                <Button
+                    android:id="@+id/sortButton"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="120dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/tv_card"
+                    android:text="By Name"
+                    android:textSize="10sp"
+                    android:textColor="@color/text_secondary"
+                    android:gravity="start|center_vertical"
+                    android:paddingStart="8dp"
+                    android:focusable="true" />
+            </LinearLayout>
+
+            <Spinner
+                android:id="@+id/titleSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:background="@drawable/tv_card"
+                android:paddingHorizontal="12dp"
+                android:layout_marginBottom="16dp"
+                android:focusable="true" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="AUDIO TRACK"
+                        android:textColor="@color/text_dim"
+                        android:textSize="9sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"
+                        android:tag="label_audio" />
+
+                    <Spinner
+                        android:id="@+id/audioSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:background="@drawable/tv_card"
+                        android:paddingHorizontal="8dp"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SUBTITLES"
+                        android:textColor="@color/text_dim"
+                        android:textSize="9sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"
+                        android:tag="label_subs" />
+
+                    <Spinner
+                        android:id="@+id/subtitleSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:background="@drawable/tv_card"
+                        android:paddingHorizontal="8dp"
+                        android:focusable="true" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/playButton"
+                style="@style/Widget.AppCompat.Button.Colored"
+                android:layout_width="160dp"
+                android:layout_height="48dp"
+                android:text="PLAY NOW"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:backgroundTint="@color/accent"
+                android:layout_marginTop="24dp"
+                android:focusable="true" />
+
+            <ImageView
+                android:id="@+id/selectedDvdCover"
+                android:layout_width="160dp"
+                android:layout_height="240dp"
+                android:layout_marginTop="32dp"
+                android:scaleType="fitCenter"
+                android:background="@drawable/tv_card"
+                android:visibility="gone" />
+
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>
