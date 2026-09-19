@@ -30,13 +30,19 @@ object Api {
         }
     }
 
-    private fun post(path: String): String {
+    private fun post(path: String, json: JSONObject? = null): String {
         val url = URL(baseUrl.trimEnd('/') + path)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.connectTimeout = 5000
         conn.readTimeout = 30000
-        conn.doOutput = true
+        if (json != null) {
+            conn.doOutput = true
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            conn.outputStream.use { os ->
+                os.write(json.toString().toByteArray(Charsets.UTF_8))
+            }
+        }
         return try {
             val code = conn.responseCode
             if (code !in 200..299) {
@@ -47,6 +53,73 @@ object Api {
         } finally {
             conn.disconnect()
         }
+    }
+
+    fun getUsers(): List<String> {
+        return try {
+            val root = JSONObject(get("/api/users"))
+            val arr = root.optJSONArray("users") ?: JSONArray()
+            List(arr.length()) { i -> arr.getString(i) }
+        } catch (e: Exception) {
+            listOf("Guest")
+        }
+    }
+
+    fun createUser(username: String): Boolean {
+        return try {
+            val json = JSONObject().apply { put("username", username) }
+            val root = JSONObject(post("/api/users", json))
+            root.optBoolean("success", false)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun getProgress(user: String, dvdName: String): Map<Int, ProgressInfo> {
+        val encodedDvd = URLEncoder.encode(dvdName, "UTF-8")
+        val encodedUser = URLEncoder.encode(user, "UTF-8")
+        val result = mutableMapOf<Int, ProgressInfo>()
+        try {
+            val raw = get("/api/progress?user=$encodedUser&dvd=$encodedDvd")
+            val root = JSONObject(raw)
+            for (key in root.keys()) {
+                val obj = root.getJSONObject(key)
+                val idx = key.toIntOrNull() ?: obj.optInt("title_idx", 0)
+                result[idx] = ProgressInfo(
+                    title_idx = obj.optInt("title_idx", idx),
+                    position = obj.optDouble("position", 0.0),
+                    duration = obj.optDouble("duration", 0.0),
+                    watched = obj.optInt("watched", 0)
+                )
+            }
+        } catch (e: Exception) {}
+        return result
+    }
+
+    fun saveProgress(user: String, dvdName: String, titleIndex: Int, position: Double, duration: Double) {
+        try {
+            val json = JSONObject().apply {
+                put("user", user)
+                put("dvd", dvdName)
+                put("title_idx", titleIndex)
+                put("position", position)
+                put("duration", duration)
+            }
+            post("/api/progress", json)
+        } catch (e: Exception) {}
+    }
+
+    fun resetProgress(user: String, dvdName: String, titleIndex: Int) {
+        try {
+            val json = JSONObject().apply {
+                put("user", user)
+                put("dvd", dvdName)
+                put("title_idx", titleIndex)
+                put("position", 0.0)
+                put("duration", 0.0)
+            }
+            post("/api/progress", json)
+        } catch (e: Exception) {}
     }
 
     fun listDvds(): List<Dvd> {

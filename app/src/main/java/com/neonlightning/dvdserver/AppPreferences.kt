@@ -15,6 +15,7 @@ class AppPreferences(context: Context) {
         private const val KEY_LAST_SELECTED_DVD = "last_selected_dvd"
         private const val KEY_SCREENSAVER_MINUTES = "screensaver_minutes"
         private const val KEY_CACHE_MODE = "cache_mode"
+        private const val KEY_CURRENT_USER = "current_user"
 
         private const val DEFAULT_BASE_URL = "http://192.168.1.100:4251"
         private const val DEFAULT_THEME = "Android TV"
@@ -23,6 +24,7 @@ class AppPreferences(context: Context) {
         private const val DEFAULT_LAST_SELECTED_DVD = 0
         private const val DEFAULT_SCREENSAVER_MINUTES = 2
         private const val DEFAULT_CACHE_MODE = 0
+        private const val DEFAULT_CURRENT_USER = "Guest"
     }
 
     var baseUrl: String
@@ -52,4 +54,8 @@ class AppPreferences(context: Context) {
     var cacheMode: Int
         get() = prefs.getInt(KEY_CACHE_MODE, DEFAULT_CACHE_MODE)
         set(value) = prefs.edit().putInt(KEY_CACHE_MODE, value).apply()
+
+    var currentUser: String
+        get() = prefs.getString(KEY_CURRENT_USER, DEFAULT_CURRENT_USER) ?: DEFAULT_CURRENT_USER
+        set(value) = prefs.edit().putString(KEY_CURRENT_USER, value).apply()
 }

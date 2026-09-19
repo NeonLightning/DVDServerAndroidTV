@@ -20,6 +20,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.toColorInt
 import com.neonlightning.dvdserver.databinding.ActivitySettingsBinding
+import kotlin.concurrent.thread
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySettingsBinding
@@ -60,6 +61,34 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
         
+        val appPrefs = AppPreferences(this)
+        var currentUser = appPrefs.currentUser
+        binding.profileButton.text = currentUser
+
+        binding.profileButton.setOnClickListener {
+            thread {
+                val users = Api.getUsers()
+                runOnUiThread {
+                    val options = mutableListOf("Create New Profile...")
+                    options.addAll(users)
+                    showThemedListDialog("Select Profile", options) { which ->
+                        if (which == 0) {
+                            showCreateProfileDialog { newName ->
+                                currentUser = newName
+                                appPrefs.currentUser = newName
+                                binding.profileButton.text = newName
+                            }
+                        } else {
+                            val selectedUser = users[which - 1]
+                            currentUser = selectedUser
+                            appPrefs.currentUser = selectedUser
+                            binding.profileButton.text = selectedUser
+                        }
+                    }
+                }
+            }
+        }
+
         binding.currentServerText.text = "Current: ${Api.baseUrl}"
 
         binding.themeButton.setOnClickListener { 
@@ -289,7 +318,7 @@ class SettingsActivity : AppCompatActivity() {
         val isHotDog = themeName == "Hot Dog Stand"
         
         // --- Selection Boxes (Styled like Spinners in MainActivity) ---
-        listOf(binding.themeButton, binding.cacheModeButton, binding.screensaverTimeButton).forEach { sp ->
+        listOf(binding.themeButton, binding.cacheModeButton, binding.screensaverTimeButton, binding.profileButton).forEach { sp ->
             sp.backgroundTintList = null
             sp.background = createSpinnerBg(accentColor, palette.second.toColorInt())
             sp.setTextColor(textColor)
@@ -311,6 +340,8 @@ class SettingsActivity : AppCompatActivity() {
         val labels = listOf(
             binding.settingsRoot.findViewWithTag<TextView>("label_appearance"),
             binding.settingsRoot.findViewWithTag<TextView>("label_ui_theme"),
+            binding.settingsRoot.findViewWithTag<TextView>("label_user_profile"),
+            binding.settingsRoot.findViewWithTag<TextView>("label_active_profile"),
             binding.settingsRoot.findViewWithTag<TextView>("label_cache_mgmt"),
             binding.settingsRoot.findViewWithTag<TextView>("label_auto_clearing"),
             binding.settingsRoot.findViewWithTag<TextView>("label_screensaver"),
@@ -319,6 +350,42 @@ class SettingsActivity : AppCompatActivity() {
             binding.settingsRoot.findViewWithTag<TextView>("label_changes_hint")
         )
         labels.forEach { it?.setTextColor(textDimColor) }
+    }
+
+    private fun showCreateProfileDialog(onCreated: (String) -> Unit) {
+        val palette = getThemePalette(currentThemeName)
+        val bgColor = palette.first.toColorInt()
+
+        val input = EditText(this)
+        input.inputType = InputType.TYPE_CLASS_TEXT
+        input.hint = "Profile Name"
+        input.setTextColor(if (currentThemeName == "Light" || currentThemeName == "Hot Dog Stand") Color.BLACK else Color.WHITE)
+        input.setHintTextColor(Color.GRAY)
+
+        val dialog = AlertDialog.Builder(this, getDialogTheme())
+            .setTitle("New Profile")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Create") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty() && name.lowercase() != "guest") {
+                    thread {
+                        val success = Api.createUser(name)
+                        runOnUiThread {
+                            if (success) {
+                                onCreated(name)
+                                Toast.makeText(this, "Profile created: $name", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(this, "Failed to create profile", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+            .create()
+
+        dialog.window?.setBackgroundDrawable(ColorDrawable(bgColor))
+        dialog.show()
     }
 
     private data class Quintuple<A, B, C, D, E>(val first: A, val second: B, val third: C, val fourth: D, val fifth: E)

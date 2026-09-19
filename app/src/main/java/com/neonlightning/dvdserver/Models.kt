@@ -45,3 +45,10 @@ data class DvdTitle(
     val subtitles: List<SubtitleTrack>,
     val audio: List<AudioTrack>
 )
+
+data class ProgressInfo(
+    val title_idx: Int,
+    val position: Double,
+    val duration: Double,
+    val watched: Int
+)

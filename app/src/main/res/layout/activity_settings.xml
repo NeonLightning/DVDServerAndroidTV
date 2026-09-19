@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/settingsRoot"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="@color/bg">
+
+<LinearLayout
+    android:id="@+id/settingsRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@color/bg"
     android:padding="48dp">
 
     <TextView
@@ -57,6 +62,39 @@
                 android:layout_height="48dp"
                 android:background="@drawable/tv_card"
                 android:text="Android TV"
+                android:textSize="14sp"
+                android:textColor="@color/text_primary"
+                android:gravity="start|center_vertical"
+                android:paddingStart="16dp"
+                android:focusable="true" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="USER PROFILE"
+                android:textColor="@color/text_dim"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginTop="32dp"
+                android:layout_marginBottom="8dp"
+                android:tag="label_user_profile" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Active Profile"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:layout_marginBottom="4dp"
+                android:tag="label_active_profile" />
+
+            <Button
+                android:id="@+id/profileButton"
+                style="@style/Widget.AppCompat.Button.Borderless"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/tv_card"
+                android:text="Guest"
                 android:textSize="14sp"
                 android:textColor="@color/text_primary"
                 android:gravity="start|center_vertical"
@@ -179,3 +217,4 @@
     </LinearLayout>
 
 </LinearLayout>
+</ScrollView>

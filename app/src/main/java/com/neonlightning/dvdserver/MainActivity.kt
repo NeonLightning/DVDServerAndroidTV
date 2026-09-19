@@ -20,11 +20,13 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.toColorInt
+import androidx.media3.common.util.UnstableApi
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.Glide
 import com.neonlightning.dvdserver.databinding.ActivityMainBinding
 import kotlin.concurrent.thread
 
+@UnstableApi
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: DvdAdapter
@@ -32,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     
     private var rawTitles: List<DvdTitle> = emptyList()
     private var sortedTitles: List<DvdTitle> = emptyList()
+    private var dvdProgressMap = mapOf<Int, ProgressInfo>()
     private var selectedDvd: Dvd? = null
     private var currentSortOrder = 0 // 0: Name, 1: Shortest, 2: Longest
     private val sortOptions = listOf("By Name", "Shortest First", "Longest First")
@@ -83,8 +86,60 @@ class MainActivity : AppCompatActivity() {
                 } 
             }.start()
         }
+
+        binding.resetProgressBtn.setOnClickListener {
+            val dvd = selectedDvd
+            if (dvd != null) {
+                AlertDialog.Builder(this, getDialogTheme())
+                    .setTitle("Reset Progress")
+                    .setMessage("Reset watch progress for ${dvd.name}?")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Reset") { _, _ ->
+                        thread {
+                            val user = prefs.currentUser
+                            for (t in rawTitles) {
+                                Api.resetProgress(user, dvd.name, t.index)
+                            }
+                            val progress = Api.getProgress(user, dvd.name)
+                            runOnUiThread {
+                                dvdProgressMap = progress
+                                updateTitleButton()
+                                Toast.makeText(this, "Progress reset", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .show()
+            } else {
+                Toast.makeText(this, "Select a DVD first", Toast.LENGTH_SHORT).show()
+            }
+        }
         
         binding.titleSelectBtn.setOnClickListener { showTitleDialog() }
+        binding.resetTitleProgressBtn.setOnClickListener {
+            val dvd = selectedDvd
+            if (dvd != null && selectedTitleIdx in sortedTitles.indices) {
+                val title = sortedTitles[selectedTitleIdx]
+                AlertDialog.Builder(this, getDialogTheme())
+                    .setTitle("Reset Title Progress")
+                    .setMessage("Reset progress for ${title.file}?")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Reset") { _, _ ->
+                        thread {
+                            val user = prefs.currentUser
+                            Api.resetProgress(user, dvd.name, title.index)
+                            val progress = Api.getProgress(user, dvd.name)
+                            runOnUiThread {
+                                dvdProgressMap = progress
+                                updateTitleButton()
+                                Toast.makeText(this, "Title progress reset", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .show()
+            } else {
+                Toast.makeText(this, "Select a title first", Toast.LENGTH_SHORT).show()
+            }
+        }
         binding.audioSelectBtn.setOnClickListener { showAudioDialog() }
         binding.subtitleSelectBtn.setOnClickListener { showSubtitleDialog() }
 
@@ -362,7 +417,7 @@ class MainActivity : AppCompatActivity() {
                        if (themeName == "Light" || isHotDog) Color.BLACK else Color.WHITE)
         ) {})
 
-        listOf(binding.refreshButton, binding.settingsButton, binding.clearCacheBtn, binding.exitButton, binding.sortButton).forEach { btn ->
+        listOf(binding.refreshButton, binding.settingsButton, binding.clearCacheBtn, binding.resetProgressBtn, binding.resetTitleProgressBtn, binding.exitButton, binding.sortButton).forEach { btn ->
             btn.backgroundTintList = null
             btn.background = createButtonBg(accentColor, Color.TRANSPARENT, isOutlined = isHotDog)
             val normalTextColor = if (btn == binding.refreshButton) accentColor else textColor
@@ -479,8 +534,11 @@ class MainActivity : AppCompatActivity() {
         thread {
             try {
                 val loaded = Api.loadDvd(dvd.name)
+                val user = AppPreferences(this).currentUser
+                val progress = Api.getProgress(user, dvd.name)
                 runOnUiThread {
                     rawTitles = loaded
+                    dvdProgressMap = progress
                     binding.statusText.text = "Ready"
                     setupTitleSelection()
                 }
@@ -495,6 +553,22 @@ class MainActivity : AppCompatActivity() {
         val h = (sec / 3600).toInt()
         val m = ((sec % 3600) / 60).toInt()
         return if (h > 0) "${h}h ${m}m" else "${m}m"
+    }
+
+    private fun getTitleLabel(title: DvdTitle): String {
+        val prog = dvdProgressMap[title.index]
+        val base = "${title.file} (${fmtDuration(title.duration)})"
+        if (prog != null && prog.duration > 0) {
+            val percent = ((prog.position / prog.duration) * 100).toInt()
+            val posStr = fmtDuration(prog.position)
+            val durStr = fmtDuration(prog.duration)
+            if (prog.watched == 1) {
+                return "$base · [Watched]"
+            } else if (prog.position > 5.0) {
+                return "$base · [In Progress: $percent% ($posStr / $durStr)]"
+            }
+        }
+        return base
     }
 
     private fun setupTitleSelection() {
@@ -514,7 +588,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateTitleButton() {
         if (selectedTitleIdx in sortedTitles.indices) {
             val it = sortedTitles[selectedTitleIdx]
-            binding.titleSelectBtn.text = "${it.file} (${fmtDuration(it.duration)})"
+            binding.titleSelectBtn.text = getTitleLabel(it)
         } else {
             binding.titleSelectBtn.text = "Choose Title..."
         }
@@ -522,7 +596,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showTitleDialog() {
         if (sortedTitles.isEmpty()) return
-        val labels = sortedTitles.map { "${it.file} (${fmtDuration(it.duration)})" }
+        val labels = sortedTitles.map { getTitleLabel(it) }
         showThemedDialog("Select Title", labels) { which ->
             selectedTitleIdx = which
             updateTitleButton()
@@ -584,6 +658,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @UnstableApi
     private fun playCurrentSelection() {
         if (selectedTitleIdx !in sortedTitles.indices) return
         

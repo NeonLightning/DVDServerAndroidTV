@@ -46,6 +46,24 @@ class PlayerActivity : AppCompatActivity() {
     private var sortedTitles: List<DvdTitle> = emptyList()
     private var currentResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
 
+    private var currentUser = "Guest"
+    private var savedPositionMs = 0L
+    private val progressHandler = Handler(Looper.getMainLooper())
+    private val progressRunnable = object : Runnable {
+        override fun run() {
+            player?.let { p ->
+                if (p.isPlaying) {
+                    val posSec = p.currentPosition / 1000.0
+                    val durSec = p.duration.let { if (it > 0) it / 1000.0 else sortedTitles.getOrNull(currentIndex)?.duration ?: 0.0 }
+                    thread {
+                        Api.saveProgress(currentUser, dvdName, currentIndex, posSec, durSec)
+                    }
+                }
+            }
+            progressHandler.postDelayed(this, 5000L)
+        }
+    }
+
     data class SubtitleCue(val startTimeMs: Long, val endTimeMs: Long, val imageUrl: String?, val text: String?)
     private var subtitleCues: List<SubtitleCue> = emptyList()
     private val subtitleHandler = Handler(Looper.getMainLooper())
@@ -88,6 +106,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("dvd_server", MODE_PRIVATE)
         Api.baseUrl = prefs.getString("base_url", Api.baseUrl) ?: Api.baseUrl
+        currentUser = prefs.getString("current_user", "Guest") ?: "Guest"
 
         dvdName = intent.getStringExtra("dvdName") ?: ""
         currentIndex = intent.getIntExtra("titleIndexInSortedList", 0)
@@ -216,6 +235,12 @@ class PlayerActivity : AppCompatActivity() {
                     2 -> raw.sortedByDescending { it.duration }
                     else -> raw.sortedBy { it.file }
                 }
+                val progressMap = Api.getProgress(currentUser, dvdName)
+                val titleProgress = progressMap[currentIndex]
+                if (titleProgress != null && titleProgress.position > 1.0 && titleProgress.watched == 0) {
+                    savedPositionMs = (titleProgress.position * 1000).toLong()
+                }
+
                 runOnUiThread {
                     val title = sortedTitles.getOrNull(currentIndex)
                     if (title != null) {
@@ -237,8 +262,18 @@ class PlayerActivity : AppCompatActivity() {
         binding.playerView.player = p
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) hideHandler.postDelayed(hideRunnable, 3000L)
-                else showControls(false)
+                if (isPlaying) {
+                    hideHandler.postDelayed(hideRunnable, 3000L)
+                    progressHandler.post(progressRunnable)
+                } else {
+                    showControls(false)
+                    progressHandler.removeCallbacks(progressRunnable)
+                    player?.let { p ->
+                        val posSec = p.currentPosition / 1000.0
+                        val durSec = p.duration.let { if (it > 0) it / 1000.0 else sortedTitles.getOrNull(currentIndex)?.duration ?: 0.0 }
+                        thread { Api.saveProgress(currentUser, dvdName, currentIndex, posSec, durSec) }
+                    }
+                }
             }
             override fun onPlayerError(e: PlaybackException) {
                 val msg = when (e.errorCode) {
@@ -299,7 +334,13 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
 
-        val currentPos = player?.currentPosition ?: C.TIME_UNSET
+        val currentPos = if (savedPositionMs > 0) {
+            val pos = savedPositionMs
+            savedPositionMs = 0L
+            pos
+        } else {
+            player?.currentPosition ?: C.TIME_UNSET
+        }
         player?.let { p ->
             p.setMediaItem(builder.build())
             p.prepare()
@@ -447,6 +488,14 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        progressHandler.removeCallbacks(progressRunnable)
+        player?.let { p ->
+            val posSec = p.currentPosition / 1000.0
+            val durSec = p.duration.let { if (it > 0) it / 1000.0 else sortedTitles.getOrNull(currentIndex)?.duration ?: 0.0 }
+            try {
+                Api.saveProgress(currentUser, dvdName, currentIndex, posSec, durSec)
+            } catch (e: Exception) {}
+        }
         super.onStop()
         player?.release()
         player = null
@@ -454,6 +503,14 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (cacheMode == 1) thread { Api.clearCache(dvdName) }
+        progressHandler.removeCallbacks(progressRunnable)
+        player?.let { p ->
+            val posSec = p.currentPosition / 1000.0
+            val durSec = p.duration.let { if (it > 0) it / 1000.0 else sortedTitles.getOrNull(currentIndex)?.duration ?: 0.0 }
+            try {
+                Api.saveProgress(currentUser, dvdName, currentIndex, posSec, durSec)
+            } catch (e: Exception) {}
+        }
         player?.release()
         player = null
         hideHandler.removeCallbacks(hideRunnable)
