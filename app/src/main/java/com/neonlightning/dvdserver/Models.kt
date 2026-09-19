@@ -22,7 +22,9 @@ data class SubtitleTrack(
     val filename: String?,
     val language: String,
     val title: String,
-    val playable: Boolean
+    val playable: Boolean,
+    val codec: String = "",
+    val stream_index: Int = -1
 )
 
 data class AudioTrack(

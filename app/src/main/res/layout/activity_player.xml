@@ -10,6 +10,18 @@
         android:layout_height="match_parent"
         android:keepScreenOn="true" />
 
+    <ImageView
+        android:id="@+id/subtitleOverlayView"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="#66000000"
+        android:scaleType="centerInside"
+        android:visibility="gone"
+        android:clickable="false"
+        android:focusable="false" />
+
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="match_parent"

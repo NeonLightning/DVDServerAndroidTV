@@ -1,16 +1,18 @@
 package com.neonlightning.dvdserver
 
+import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
-import java.net.URLEncoder
 import java.net.URL
+import java.net.URLEncoder
 
 object Api {
     var baseUrl: String = "http://192.168.1.100:4251"
 
     fun encodePathSegments(p: String): String {
-        return p.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+        // Correctly encodes segments like "Action (1990)" while preserving "/" separators
+        return p.split("/").joinToString("/") { Uri.encode(it) }
     }
 
     private fun get(path: String): String {
@@ -93,7 +95,9 @@ object Api {
                 if (s.has("filename")) s.optString("filename") else null,
                 s.optString("language", "und"),
                 s.optString("title"),
-                s.optBoolean("playable", false)
+                s.optBoolean("playable", false),
+                s.optString("codec", ""),
+                s.optInt("stream_index", -1)
             )
         }
 
@@ -126,7 +130,8 @@ object Api {
         "${baseUrl.trimEnd('/')}/api/dvd/stream/$titleIndex?audio=$audioIndex"
 
     fun subtitleUrl(titleIndex: Int, subtitleId: String): String {
-        val encoded = URLEncoder.encode(subtitleId, "UTF-8").replace("+", "%20")
+        // Encodes subtitle ID (e.g. file:movie.srt) for the URL path
+        val encoded = Uri.encode(subtitleId)
         return "${baseUrl.trimEnd('/')}/api/dvd/subtitle/$titleIndex/$encoded"
     }
 
