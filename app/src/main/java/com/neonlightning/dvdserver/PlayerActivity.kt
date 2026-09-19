@@ -46,7 +46,7 @@ class PlayerActivity : AppCompatActivity() {
     private var sortedTitles: List<DvdTitle> = emptyList()
     private var currentResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
 
-    data class SubtitleCue(val startTimeMs: Long, val endTimeMs: Long, val imageUrl: String)
+    data class SubtitleCue(val startTimeMs: Long, val endTimeMs: Long, val imageUrl: String?, val text: String?)
     private var subtitleCues: List<SubtitleCue> = emptyList()
     private val subtitleHandler = Handler(Looper.getMainLooper())
     private val subtitleRunnable = object : Runnable {
@@ -56,13 +56,21 @@ class PlayerActivity : AppCompatActivity() {
                     val pos = p.currentPosition
                     val cue = subtitleCues.find { pos in it.startTimeMs..it.endTimeMs }
                     if (cue != null) {
-                        binding.subtitleOverlayView.visibility = View.VISIBLE
-                        val fullImgUrl = Api.fullUrl(cue.imageUrl) ?: cue.imageUrl
-                        Glide.with(this@PlayerActivity)
-                            .load(fullImgUrl)
-                            .into(binding.subtitleOverlayView)
+                        binding.subtitleContainer.visibility = View.VISIBLE
+                        if (cue.imageUrl != null) {
+                            binding.subtitleOverlayView.visibility = View.VISIBLE
+                            binding.subtitleTextView.visibility = View.GONE
+                            val fullImgUrl = Api.fullUrl(cue.imageUrl) ?: cue.imageUrl
+                            Glide.with(this@PlayerActivity)
+                                .load(fullImgUrl)
+                                .into(binding.subtitleOverlayView)
+                        } else if (cue.text != null) {
+                            binding.subtitleOverlayView.visibility = View.GONE
+                            binding.subtitleTextView.visibility = View.VISIBLE
+                            binding.subtitleTextView.text = cue.text
+                        }
                     } else {
-                        binding.subtitleOverlayView.visibility = View.GONE
+                        binding.subtitleContainer.visibility = View.GONE
                     }
                 }
             }
@@ -263,44 +271,45 @@ class PlayerActivity : AppCompatActivity() {
         val url = Api.streamUrl(title.index, currentAudioIndex)
         val builder = MediaItem.Builder().setUri(Uri.parse(url))
 
-        loadSubtitles()
-
-        player?.let { p ->
-            p.setMediaItem(builder.build())
-            p.prepare()
-            p.play()
-        }
-
-        updateButtonLabels()
-    }
-
-    private fun loadSubtitles() {
-        val title = sortedTitles.getOrNull(currentIndex) ?: return
+        val sub = title.subtitles.find { it.id == currentSubtitleId }
         subtitleCues = emptyList()
         subtitleHandler.removeCallbacks(subtitleRunnable)
-        binding.subtitleOverlayView.visibility = View.GONE
+        binding.subtitleContainer.visibility = View.GONE
 
-        val sub = title.subtitles.find { it.id == currentSubtitleId }
         if (sub != null && sub.playable) {
             val subtitleUrl = Api.subtitleUrl(title.index, sub.id)
+            val isSrt = sub.codec.contains("subrip", true) || sub.id.endsWith(".srt", true) || sub.filename?.endsWith(".srt", true) == true
+
             thread {
                 try {
                     val conn = URL(subtitleUrl).openConnection() as HttpURLConnection
                     conn.connectTimeout = 5000
                     conn.readTimeout = 10000
                     val text = conn.inputStream.bufferedReader().use { it.readText() }
-                    val parsed = parseVtt(text)
-                    runOnUiThread {
-                        subtitleCues = parsed
-                        if (subtitleCues.isNotEmpty()) {
+                    val parsed = if (isSrt) parseSrt(text) else parseVtt(text)
+                    if (parsed.isNotEmpty()) {
+                        runOnUiThread {
+                            subtitleCues = parsed
                             subtitleHandler.post(subtitleRunnable)
                         }
                     }
                 } catch (e: Exception) {
-                    AppLogger.e("Failed to load/parse subtitle VTT", e)
+                    AppLogger.e("Failed to load/parse subtitles", e)
                 }
             }
         }
+
+        val currentPos = player?.currentPosition ?: C.TIME_UNSET
+        player?.let { p ->
+            p.setMediaItem(builder.build())
+            p.prepare()
+            if (currentPos != C.TIME_UNSET && currentPos > 0) {
+                p.seekTo(currentPos)
+            }
+            p.play()
+        }
+
+        updateButtonLabels()
     }
 
     private fun parseVtt(vttText: String): List<SubtitleCue> {
@@ -323,11 +332,35 @@ class PlayerActivity : AppCompatActivity() {
                     val rawContent = imageUrlLines.joinToString(" ")
                     val imageUrl = extractUrlFromCue(rawContent)
                     if (imageUrl != null && startMs >= 0 && endMs > startMs) {
-                        cues.add(SubtitleCue(startMs, endMs, imageUrl))
+                        cues.add(SubtitleCue(startMs, endMs, imageUrl, null))
                     }
                 }
             }
             i++
+        }
+        return cues
+    }
+
+    private fun parseSrt(srtText: String): List<SubtitleCue> {
+        val cues = mutableListOf<SubtitleCue>()
+        val blocks = srtText.split(Regex("\\r?\\n\\r?\\n"))
+        for (block in blocks) {
+            val lines = block.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            if (lines.size >= 2) {
+                val timeLineIndex = if (lines[0].all { it.isDigit() }) 1 else 0
+                if (lines.size > timeLineIndex && lines[timeLineIndex].contains("-->")) {
+                    val parts = lines[timeLineIndex].split("-->").map { it.trim() }
+                    if (parts.size >= 2) {
+                        val startMs = parseTimestamp(parts[0].replace(',', '.'))
+                        val endMs = parseTimestamp(parts[1].substringBefore(" ").replace(',', '.'))
+                        val textLines = lines.drop(timeLineIndex + 1)
+                        val text = textLines.joinToString("\n")
+                        if (startMs >= 0 && endMs > startMs && text.isNotEmpty()) {
+                            cues.add(SubtitleCue(startMs, endMs, null, text))
+                        }
+                    }
+                }
+            }
         }
         return cues
     }
@@ -361,8 +394,9 @@ class PlayerActivity : AppCompatActivity() {
                 return content.substring(start, end)
             }
         }
-        if (content.startsWith("http") || content.startsWith("/") || content.contains(".")) {
-            return content.trim()
+        val trimmed = content.trim()
+        if ((trimmed.endsWith(".png", true) || trimmed.endsWith(".jpg", true) || trimmed.contains("/api/dvd/")) && !trimmed.contains(" ")) {
+            return trimmed
         }
         return null
     }
@@ -393,7 +427,7 @@ class PlayerActivity : AppCompatActivity() {
 
         AlertDialog.Builder(this).setTitle("Subtitles").setItems(labels.toTypedArray()) { _, w ->
             currentSubtitleId = if (w == 0) null else playableSubs[w - 1].id
-            loadSubtitles()
+            prepareMedia()
             updateButtonLabels()
         }.show()
     }
