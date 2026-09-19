@@ -86,17 +86,6 @@
                 android:tag="btn_cache" />
 
             <Button
-                android:id="@+id/resetProgressBtn"
-                style="@style/Widget.AppCompat.Button.Borderless"
-                android:layout_width="match_parent"
-                android:layout_height="36dp"
-                android:text="RESET PROGRESS"
-                android:textSize="10sp"
-                android:textColor="@color/text_secondary"
-                android:focusable="true"
-                android:tag="btn_reset_progress" />
-
-            <Button
                 android:id="@+id/settingsButton"
                 style="@style/Widget.AppCompat.Button.Borderless"
                 android:layout_width="match_parent"

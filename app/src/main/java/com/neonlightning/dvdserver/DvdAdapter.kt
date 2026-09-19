@@ -18,12 +18,13 @@ class DvdAdapter(
 
     companion object {
         private const val TYPE_HEADER = 0
-        private const val TYPE_ITEM = 1
+        private const val TYPE_SUBHEADER = 1
+        private const val TYPE_ITEM = 2
     }
 
-    private val allGrouped = mutableMapOf<String, List<Dvd>>()
-    private val collapsedGenres = mutableSetOf<String>()
-    private val flatItems = mutableListOf<Any>() // Contains either String (header) or Dvd (item)
+    private val allGrouped = mutableMapOf<String, MutableMap<String, List<Dvd>>>()
+    private val collapsedKeys = mutableSetOf<String>()
+    private val flatItems = mutableListOf<Any>() // String (Genre Header), SubfolderNode (Subheader), or Dvd (item)
 
     var textColor: Int = Color.WHITE
     var textDimColor: Int = Color.LTGRAY
@@ -31,15 +32,24 @@ class DvdAdapter(
     var backgroundColor: Int = Color.parseColor("#101014")
     var panelColor: Int = Color.parseColor("#1B1B22")
 
+    data class SubfolderNode(val genre: String, val subpath: String, val label: String)
+
     fun submit(dvds: List<Dvd>) {
         allGrouped.clear()
-        val grouped = dvds.groupBy { it.genre }
-        for ((genre, list) in grouped) {
-            val label = if (genre.isBlank()) "Uncategorized" else genre
-            allGrouped[label] = list
-            // Start collapsed by default if not explicitly tracked
-            if (!collapsedGenres.contains(label)) {
-                collapsedGenres.add(label)
+        for (dvd in dvds) {
+            val genre = if (dvd.genre.isBlank()) "Uncategorized" else dvd.genre
+            val subpath = dvd.subpath.ifBlank { "" }
+            allGrouped.getOrPut(genre) { mutableMapOf() }.getOrPut(subpath) { mutableListOf() }.let {
+                (it as MutableList<Dvd>).add(dvd)
+            }
+            if (!collapsedKeys.contains(genre)) {
+                collapsedKeys.add(genre)
+            }
+            if (subpath.isNotBlank()) {
+                val subKey = "$genre::$subpath"
+                if (!collapsedKeys.contains(subKey)) {
+                    collapsedKeys.add(subKey)
+                }
             }
         }
         rebuildFlatList()
@@ -47,36 +57,47 @@ class DvdAdapter(
 
     private fun rebuildFlatList() {
         flatItems.clear()
-        for ((genreLabel, list) in allGrouped) {
-            flatItems.add(genreLabel)
-            if (!collapsedGenres.contains(genreLabel)) {
-                flatItems.addAll(list)
+        for ((genre, subpaths) in allGrouped.toSortedMap()) {
+            flatItems.add(genre)
+            if (!collapsedKeys.contains(genre)) {
+                for ((subpath, dvds) in subpaths.toSortedMap()) {
+                    if (subpath.isNotBlank()) {
+                        val subKey = "$genre::$subpath"
+                        flatItems.add(SubfolderNode(genre, subpath, subpath))
+                        if (!collapsedKeys.contains(subKey)) {
+                            flatItems.addAll(dvds.sortedBy { it.display_name })
+                        }
+                    } else {
+                        flatItems.addAll(dvds.sortedBy { it.display_name })
+                    }
+                }
             }
         }
         notifyDataSetChanged()
     }
 
     override fun getItemViewType(position: Int): Int {
-        return if (flatItems[position] is String) TYPE_HEADER else TYPE_ITEM
+        return when (flatItems[position]) {
+            is String -> TYPE_HEADER
+            is SubfolderNode -> TYPE_SUBHEADER
+            else -> TYPE_ITEM
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-        if (viewType == TYPE_HEADER) {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_genre_header, parent, false)
-            return HeaderVH(view)
-        } else {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_dvd, parent, false)
-            return ItemVH(view)
+        val inflater = LayoutInflater.from(parent.context)
+        return when (viewType) {
+            TYPE_HEADER -> HeaderVH(inflater.inflate(R.layout.item_genre_header, parent, false))
+            TYPE_SUBHEADER -> SubheaderVH(inflater.inflate(R.layout.item_genre_header, parent, false))
+            else -> ItemVH(inflater.inflate(R.layout.item_dvd, parent, false))
         }
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        if (holder is HeaderVH) {
-            holder.bind(flatItems[position] as String)
-        } else if (holder is ItemVH) {
-            holder.bind(flatItems[position] as Dvd)
+        when (holder) {
+            is HeaderVH -> holder.bind(flatItems[position] as String)
+            is SubheaderVH -> holder.bind(flatItems[position] as SubfolderNode)
+            is ItemVH -> holder.bind(flatItems[position] as Dvd)
         }
     }
 
@@ -86,37 +107,70 @@ class DvdAdapter(
         private val headerText: TextView = view.findViewById(R.id.headerText)
 
         fun bind(genreLabel: String) {
-            val isCollapsed = collapsedGenres.contains(genreLabel)
+            val isCollapsed = collapsedKeys.contains(genreLabel)
             val arrow = if (isCollapsed) "▶ " else "▼ "
             headerText.text = "$arrow$genreLabel"
             headerText.setTextColor(accentColor)
-            
+            headerText.setPadding(4, 16, 4, 6)
+
             val focused = GradientDrawable().apply {
                 setColor(backgroundColor)
                 setStroke(4, accentColor)
                 cornerRadius = 0f
             }
             val normal = ColorDrawable(Color.TRANSPARENT)
-            
+
             headerText.background = StateListDrawable().apply {
                 addState(intArrayOf(android.R.attr.state_focused), focused)
                 addState(intArrayOf(), normal)
             }
-            
+
             headerText.isFocusable = true
             headerText.isFocusableInTouchMode = true
-            
+
             headerText.setOnClickListener {
-                toggleGenre(genreLabel)
+                toggleKey(genreLabel)
             }
         }
     }
 
-    private fun toggleGenre(genreLabel: String) {
-        if (collapsedGenres.contains(genreLabel)) {
-            collapsedGenres.remove(genreLabel)
+    inner class SubheaderVH(view: View) : RecyclerView.ViewHolder(view) {
+        private val headerText: TextView = view.findViewById(R.id.headerText)
+
+        fun bind(node: SubfolderNode) {
+            val subKey = "${node.genre}::${node.subpath}"
+            val isCollapsed = collapsedKeys.contains(subKey)
+            val arrow = if (isCollapsed) "📁 " else "📂 "
+            headerText.text = "    $arrow${node.label}"
+            headerText.setTextColor(textDimColor)
+            headerText.setPadding(24, 12, 4, 4)
+
+            val focused = GradientDrawable().apply {
+                setColor(backgroundColor)
+                setStroke(4, accentColor)
+                cornerRadius = 0f
+            }
+            val normal = ColorDrawable(Color.TRANSPARENT)
+
+            headerText.background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), focused)
+                addState(intArrayOf(), normal)
+            }
+
+            headerText.isFocusable = true
+            headerText.isFocusableInTouchMode = true
+
+            headerText.setOnClickListener {
+                toggleKey(subKey)
+            }
+        }
+    }
+
+    private fun toggleKey(key: String) {
+        if (collapsedKeys.contains(key)) {
+            collapsedKeys.remove(key)
         } else {
-            collapsedGenres.add(genreLabel)
+            collapsedKeys.add(key)
         }
         rebuildFlatList()
     }
@@ -129,14 +183,14 @@ class DvdAdapter(
         fun bind(dvd: Dvd) {
             name.text = dvd.display_name
             path.text = dvd.name
-            
+
             val isBright = isColorBright(accentColor)
             val contentColor = if (isBright) Color.BLACK else Color.WHITE
-            
+
             name.setTextColor(contentColor)
             path.setTextColor(contentColor)
             path.alpha = 0.7f
-            
+
             if (dvd.cover != null && dvd.cover.isNotEmpty()) {
                 cover.visibility = View.VISIBLE
                 Glide.with(itemView.context)
@@ -146,7 +200,7 @@ class DvdAdapter(
             } else {
                 cover.visibility = View.GONE
             }
-            
+
             val focused = GradientDrawable().apply {
                 setColor(backgroundColor)
                 setStroke(6, accentColor)
@@ -157,12 +211,12 @@ class DvdAdapter(
                 setStroke(2, Color.BLACK)
                 cornerRadius = 0f
             }
-            
+
             itemView.background = StateListDrawable().apply {
                 addState(intArrayOf(android.R.attr.state_focused), focused)
                 addState(intArrayOf(), normal)
             }
-            
+
             fun applyTextColors(hasFocus: Boolean) {
                 if (hasFocus) {
                     name.setTextColor(textColor)
@@ -177,12 +231,12 @@ class DvdAdapter(
             }
 
             applyTextColors(itemView.hasFocus())
-            
+
             itemView.setOnFocusChangeListener { _, hasFocus ->
                 applyTextColors(hasFocus)
             }
-            
-            itemView.setOnClickListener { 
+
+            itemView.setOnClickListener {
                 val pos = bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) {
                     onClick(dvd, pos)

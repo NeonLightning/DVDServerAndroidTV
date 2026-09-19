@@ -87,33 +87,6 @@ class MainActivity : AppCompatActivity() {
             }.start()
         }
 
-        binding.resetProgressBtn.setOnClickListener {
-            val dvd = selectedDvd
-            if (dvd != null) {
-                AlertDialog.Builder(this, getDialogTheme())
-                    .setTitle("Reset Progress")
-                    .setMessage("Reset watch progress for ${dvd.name}?")
-                    .setNegativeButton("Cancel", null)
-                    .setPositiveButton("Reset") { _, _ ->
-                        thread {
-                            val user = prefs.currentUser
-                            for (t in rawTitles) {
-                                Api.resetProgress(user, dvd.name, t.index)
-                            }
-                            val progress = Api.getProgress(user, dvd.name)
-                            runOnUiThread {
-                                dvdProgressMap = progress
-                                updateTitleButton()
-                                Toast.makeText(this, "Progress reset", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                    .show()
-            } else {
-                Toast.makeText(this, "Select a DVD first", Toast.LENGTH_SHORT).show()
-            }
-        }
-        
         binding.titleSelectBtn.setOnClickListener { showTitleDialog() }
         binding.resetTitleProgressBtn.setOnClickListener {
             val dvd = selectedDvd
@@ -417,7 +390,7 @@ class MainActivity : AppCompatActivity() {
                        if (themeName == "Light" || isHotDog) Color.BLACK else Color.WHITE)
         ) {})
 
-        listOf(binding.refreshButton, binding.settingsButton, binding.clearCacheBtn, binding.resetProgressBtn, binding.resetTitleProgressBtn, binding.exitButton, binding.sortButton).forEach { btn ->
+        listOf(binding.refreshButton, binding.settingsButton, binding.clearCacheBtn, binding.resetTitleProgressBtn, binding.exitButton, binding.sortButton).forEach { btn ->
             btn.backgroundTintList = null
             btn.background = createButtonBg(accentColor, Color.TRANSPARENT, isOutlined = isHotDog)
             val normalTextColor = if (btn == binding.refreshButton) accentColor else textColor
@@ -518,7 +491,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.emptyState.visibility = View.GONE
         binding.dvdDetails.visibility = View.VISIBLE
-        binding.selectedDvdName.text = dvd.name
+        binding.selectedDvdName.text = dvd.name.substringAfterLast('/')
         binding.selectedDvdPath.text = dvd.path
         
         if (dvd.cover != null) {

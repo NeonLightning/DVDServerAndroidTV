@@ -301,7 +301,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun prepareMedia() {
         val title = sortedTitles.getOrNull(currentIndex) ?: return
-        binding.playerTitle.text = "$dvdName • ${title.file}"
+        val dvdFolderName = dvdName.substringAfterLast('/')
+        binding.playerTitle.text = "$dvdFolderName/${title.file}"
 
         val url = Api.streamUrl(title.index, currentAudioIndex)
         val builder = MediaItem.Builder().setUri(Uri.parse(url))
